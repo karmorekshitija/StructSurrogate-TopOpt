@@ -1,0 +1,139 @@
+{
+  "project": "StructSurrogate-TopOpt: Physics-Informed Beam Inverse Solver, Reliability Engine & SIMP Topology Optimizer",
+  "course_grounding": "CVL2502 (Engineering Mechanics of Determinate Structures, IIT Delhi)",
+  "paper_reproductions": [
+    "Raissi, Perdikaris, & Karniadakis (2019), J. Comput. Phys., 378, 686-707",
+    "Sigmund, O. (2001), Structural and Multidisciplinary Optimization, 21(2), 120-127"
+  ],
+  "forward_fem_verification": {
+    "span_m": 24.0,
+    "num_elements": 48,
+    "exact_midspan_deflection_mm": 31.3714,
+    "fem_midspan_deflection_mm": 31.3714,
+    "relative_error_pct": 0.0
+  },
+  "physics_informed_surrogate": {
+    "num_spectral_modes": 9,
+    "num_collocation_points": 96,
+    "num_virtual_sensors": 15,
+    "l2_relative_error_pct": 0.00182,
+    "relative_pde_residual": 5.8e-07,
+    "surrogate_inference_ms": 0.03356,
+    "fem_solve_ms": 0.74358,
+    "speedup_factor_x": 22.2
+  },
+  "inverse_damage_identification": {
+    "true_peak_stiffness_loss_pct": 31.61,
+    "reconstructed_peak_stiffness_loss_pct": 29.47,
+    "true_damage_center_m": 10.75,
+    "reconstructed_damage_center_m": 11.25,
+    "stiffness_profile_l2_error_pct": 1.038,
+    "midspan_deflection_intact_mm": 31.371,
+    "midspan_deflection_damaged_mm": 36.071
+  },
+  "monte_carlo_form_reliability": {
+    "num_monte_carlo_trials": 100000,
+    "allowable_deflection_mm": 40.0,
+    "mean_deflection_mm": 31.698,
+    "p99_deflection_mm": 42.687,
+    "monte_carlo_failure_probability": 0.03157,
+    "form_failure_probability": 0.031752,
+    "form_reliability_index_beta": 1.8556,
+    "fos_mean_std_beta": 2.0503
+  },
+  "simp_topology_optimization": {
+    "mesh_dimensions": "30x10",
+    "num_elements": 300,
+    "target_volume_fraction": 0.45,
+    "achieved_volume_fraction": 0.45,
+    "simp_penalization_p": 3.0,
+    "filter_radius_rmin": 1.4,
+    "iterations_executed": 35,
+    "initial_compliance": 1337.218,
+    "final_optimal_compliance": 259.0894,
+    "compliance_reduction_pct": 80.62,
+    "binary_solid_void_fraction_pct": 72.33,
+    "compliance_history": [
+      1337.218,
+      767.9783,
+      543.1511,
+      446.273,
+      410.8385,
+      394.6574,
+      383.7244,
+      373.9586,
+      366.0785,
+      358.9379,
+      352.3447,
+      345.497,
+      337.8668,
+      329.0043,
+      318.1343,
+      305.4276,
+      291.9693,
+      280.2789,
+      272.5319,
+      268.2825,
+      265.8247,
+      264.2258,
+      263.1625,
+      262.3847,
+      261.7677,
+      261.2689,
+      260.8948,
+      260.5298,
+      260.2682,
+      260.0141,
+      259.7661,
+      259.559,
+      259.4182,
+      259.2597,
+      259.0894
+    ],
+    "ascii_truss_topology": [
+      "#####################+        ",
+      "####+++++++++++++++###+       ",
+      " .+#+.          .+#+++#+.     ",
+      "  .+#+.        .+#+.  +#+.    ",
+      "    +##.      .+#+.    +#+.   ",
+      "     +##+    .##+       +##.  ",
+      "      .##+. .##+         +##. ",
+      ".......++#++##.           .##+",
+      "#############..        ....+##",
+      "##############################"
+    ]
+  },
+  "verification_tests": [
+    {
+      "test_id": "STRUCT_01_HERMITE_FEM_EXACT_MATCH",
+      "description": "Hermite cubic FEM midspan deflection matches exact Euler-Bernoulli Macaulay solution within 0.01%",
+      "computed_value": "Exact=31.3714 mm, FEM=31.3714 mm (err=0.000000%)",
+      "passed": true
+    },
+    {
+      "test_id": "STRUCT_02_PHYSICS_INFORMED_SURROGATE_ACCURACY",
+      "description": "Physics-informed spectral surrogate achieves < 0.25% L2 deflection error and > 10x speedup vs FEM",
+      "computed_value": "L2_err=0.0018%, Speedup=22.2x",
+      "passed": true
+    },
+    {
+      "test_id": "STRUCT_03_INVERSE_DAMAGE_LOCALIZATION",
+      "description": "Regularized physics-constrained inverse solver reconstructs EI(x) within 2.5% L2 error under 1% noise",
+      "computed_value": "L2_err=1.038%, Center=11.25m",
+      "passed": true
+    },
+    {
+      "test_id": "STRUCT_04_MONTE_CARLO_FORM_CONSISTENCY",
+      "description": "100,000-trial Monte Carlo failure probability agrees closely with Hasofer-Lind FORM reliability index",
+      "computed_value": "P_f(MC)=0.03157, P_f(FORM)=0.03175, beta=1.856",
+      "passed": true
+    },
+    {
+      "test_id": "STRUCT_05_SIMP_TOPOLOGY_CONVERGENCE",
+      "description": "Sigmund (2001) SIMP bridge optimizer satisfies exact volume constraint (0.45) and reduces compliance > 55%",
+      "computed_value": "Vol=0.4500, Compliance Reduction=80.62%",
+      "passed": true
+    }
+  ],
+  "all_tests_passed": true
+}
