@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="550" viewBox="0 0 900 550"><rect width="900" height="550" fill="white"/><g font-family="Arial,sans-serif" font-size="14" fill="#172b4d">
+<text x="450" y="30" text-anchor="middle" font-size="20">SIMP objective history (not proof of convergence)</text>
+<path d="M90 430 H840" stroke="#dde2e8"/>
+<text x="78" y="435" text-anchor="end">0</text>
+<text x="90" y="455" text-anchor="middle">0</text>
+<path d="M90 362 H840" stroke="#dde2e8"/>
+<text x="78" y="367" text-anchor="end">289</text>
+<text x="240" y="455" text-anchor="middle">7</text>
+<path d="M90 294 H840" stroke="#dde2e8"/>
+<text x="78" y="299" text-anchor="end">578</text>
+<text x="390" y="455" text-anchor="middle">14</text>
+<path d="M90 226 H840" stroke="#dde2e8"/>
+<text x="78" y="231" text-anchor="end">867</text>
+<text x="540" y="455" text-anchor="middle">21</text>
+<path d="M90 158 H840" stroke="#dde2e8"/>
+<text x="78" y="163" text-anchor="end">1.16e+03</text>
+<text x="690" y="455" text-anchor="middle">28</text>
+<path d="M90 90 H840" stroke="#dde2e8"/>
+<text x="78" y="95" text-anchor="end">1.44e+03</text>
+<text x="840" y="455" text-anchor="middle">35</text>
+<path d="M90 90 V430 H840" fill="none" stroke="#172b4d"/>
+<polyline points="90.00,115.19 111.43,249.20 132.86,302.13 154.29,324.94 175.71,333.28 197.14,337.09 218.57,339.66 240.00,341.96 261.43,343.82 282.86,345.50 304.29,347.05 325.71,348.66 347.14,350.46 368.57,352.54 390.00,355.10 411.43,358.09 432.86,361.26 454.29,364.02 475.71,365.84 497.14,366.84 518.57,367.42 540.00,367.79 561.43,368.04 582.86,368.23 604.29,368.37 625.71,368.49 647.14,368.58 668.57,368.66 690.00,368.73 711.43,368.79 732.86,368.84 754.29,368.89 775.71,368.93 797.14,368.96 818.57,369.00 840.00,369.04" stroke="#1768ac" stroke-width="2" fill="none"/>
+<circle cx="90.00" cy="115.19" r="3" fill="#1768ac"/>
+<circle cx="111.43" cy="249.20" r="3" fill="#1768ac"/>
+<circle cx="132.86" cy="302.13" r="3" fill="#1768ac"/>
+<circle cx="154.29" cy="324.94" r="3" fill="#1768ac"/>
+<circle cx="175.71" cy="333.28" r="3" fill="#1768ac"/>
+<circle cx="197.14" cy="337.09" r="3" fill="#1768ac"/>
+<circle cx="218.57" cy="339.66" r="3" fill="#1768ac"/>
+<circle cx="240.00" cy="341.96" r="3" fill="#1768ac"/>
+<circle cx="261.43" cy="343.82" r="3" fill="#1768ac"/>
+<circle cx="282.86" cy="345.50" r="3" fill="#1768ac"/>
+<circle cx="304.29" cy="347.05" r="3" fill="#1768ac"/>
+<circle cx="325.71" cy="348.66" r="3" fill="#1768ac"/>
+<circle cx="347.14" cy="350.46" r="3" fill="#1768ac"/>
+<circle cx="368.57" cy="352.54" r="3" fill="#1768ac"/>
+<circle cx="390.00" cy="355.10" r="3" fill="#1768ac"/>
+<circle cx="411.43" cy="358.09" r="3" fill="#1768ac"/>
+<circle cx="432.86" cy="361.26" r="3" fill="#1768ac"/>
+<circle cx="454.29" cy="364.02" r="3" fill="#1768ac"/>
+<circle cx="475.71" cy="365.84" r="3" fill="#1768ac"/>
+<circle cx="497.14" cy="366.84" r="3" fill="#1768ac"/>
+<circle cx="518.57" cy="367.42" r="3" fill="#1768ac"/>
+<circle cx="540.00" cy="367.79" r="3" fill="#1768ac"/>
+<circle cx="561.43" cy="368.04" r="3" fill="#1768ac"/>
+<circle cx="582.86" cy="368.23" r="3" fill="#1768ac"/>
+<circle cx="604.29" cy="368.37" r="3" fill="#1768ac"/>
+<circle cx="625.71" cy="368.49" r="3" fill="#1768ac"/>
+<circle cx="647.14" cy="368.58" r="3" fill="#1768ac"/>
+<circle cx="668.57" cy="368.66" r="3" fill="#1768ac"/>
+<circle cx="690.00" cy="368.73" r="3" fill="#1768ac"/>
+<circle cx="711.43" cy="368.79" r="3" fill="#1768ac"/>
+<circle cx="732.86" cy="368.84" r="3" fill="#1768ac"/>
+<circle cx="754.29" cy="368.89" r="3" fill="#1768ac"/>
+<circle cx="775.71" cy="368.93" r="3" fill="#1768ac"/>
+<circle cx="797.14" cy="368.96" r="3" fill="#1768ac"/>
+<circle cx="818.57" cy="369.00" r="3" fill="#1768ac"/>
+<circle cx="840.00" cy="369.04" r="3" fill="#1768ac"/>
+<text x="100" y="65" fill="#1768ac">Evaluated density state</text>
+<text x="450" y="495" text-anchor="middle">Density update count</text>
+<text transform="translate(20,270) rotate(-90)" text-anchor="middle">Nondimensional compliance</text>
+<text x="450" y="530" text-anchor="middle" fill="#555">Reproducible numerical evidence; not field-performance validation</text></g></svg>

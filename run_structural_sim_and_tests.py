@@ -5,11 +5,8 @@ Monte Carlo / FORM Bridge Reliability Engine, and SIMP 2D Topology Optimizer
 ====================================================================================
 Author: Kshitija Karmore (B.Tech Civil Engineering, IIT Delhi)
 Course Grounding: CVL2502 (Engineering Mechanics of Determinate Structures)
-Paper Reproductions:
-  1. Raissi, Perdikaris, & Karniadakis (2019), "Physics-informed neural networks:
-     A deep learning framework for solving forward and inverse problems involving
-     nonlinear partial differential equations", J. Comput. Phys., 378, 686-707.
-  2. Sigmund, O. (2001), "A 99 line topology optimization code written in Matlab",
+Method reference (not an exact paper reproduction or neural network):
+  Sigmund, O. (2001), "A 99 line topology optimization code written in Matlab",
      Structural and Multidisciplinary Optimization, 21(2), 120-127.
 
 Zero-Dependency Pure-Python Implementation (Custom Banded Cholesky & Gaussian Solver,
@@ -23,6 +20,7 @@ import csv
 import json
 import math
 import random
+import statistics
 import time
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
@@ -35,6 +33,10 @@ from typing import Dict, List, Sequence, Tuple
 def solve_dense_linear(A: List[List[float]], b: List[float]) -> List[float]:
     """Solves A * x = b via Gaussian elimination with partial pivoting."""
     n = len(b)
+    if not n or len(A) != n or any(len(row) != n for row in A):
+        raise ValueError("Expected a nonempty square system")
+    if any(not math.isfinite(value) for row in A for value in row) or any(not math.isfinite(value) for value in b):
+        raise ValueError("Linear system must be finite")
     M = [row[:] + [b[i]] for i, row in enumerate(A)]
     for k in range(n):
         max_row = k
@@ -47,7 +49,7 @@ def solve_dense_linear(A: List[List[float]], b: List[float]) -> List[float]:
             M[k], M[max_row] = M[max_row], M[k]
         piv = M[k][k]
         if abs(piv) < 1e-18:
-            piv = 1e-18
+            raise ValueError("Singular or numerically unresolved linear system")
         for i in range(k + 1, n):
             fac = M[i][k] / piv
             if fac != 0.0:
@@ -61,7 +63,7 @@ def solve_dense_linear(A: List[List[float]], b: List[float]) -> List[float]:
         row_i = M[i]
         for j in range(i + 1, n):
             s -= row_i[j] * x[j]
-        x[i] = s / (row_i[i] if abs(row_i[i]) > 1e-18 else 1e-18)
+        x[i] = s / row_i[i]
     return x
 
 
@@ -72,6 +74,10 @@ def solve_banded_spd(A_band: List[List[float]], b: List[float], bw: int) -> List
     Complexity: O(N * bw^2) instead of O(N^3).
     """
     n = len(b)
+    if not n or not isinstance(bw, int) or bw < 0 or len(A_band) != n or any(len(row) != bw+1 for row in A_band):
+        raise ValueError("Invalid banded system dimensions")
+    if any(not math.isfinite(value) for row in A_band for value in row) or any(not math.isfinite(value) for value in b):
+        raise ValueError("Linear system must be finite")
     # In-place LDL^T factorization in lower-triangular band L[i][d] = L_{i, i-d}
     L = [[0.0] * (bw + 1) for _ in range(n)]
     D = [0.0] * n
@@ -88,7 +94,9 @@ def solve_banded_spd(A_band: List[List[float]], b: List[float], bw: int) -> List
         s_diag = A_band[i][0]
         for k in range(d_min, i):
             s_diag -= (L[i][i - k] ** 2) * D[k]
-        D[i] = s_diag if s_diag > 1e-15 else 1e-15
+        if s_diag <= 0 or not math.isfinite(s_diag):
+            raise ValueError("Matrix must be positive definite; no pivot clipping applied")
+        D[i] = s_diag
 
     # Forward substitution: L * y = b
     y = [0.0] * n
@@ -131,6 +139,12 @@ class EulerBernoulliBridgeSolver:
         q_dead_n_per_m: float = 45000.0, # 45 kN/m uniform dead + wearing course load
         point_load_n: float = 240000.0,  # 240 kN concentrated axle load at midspan
     ) -> None:
+        if not isinstance(num_elements, int) or isinstance(num_elements, bool) or num_elements < 2 or num_elements % 2:
+            raise ValueError("Use an even number of elements >= 2 so the midspan load lies on a node")
+        if not all(math.isfinite(value) and value > 0 for value in (span_m, ei_intact_nm2)):
+            raise ValueError("Span and stiffness must be finite and positive")
+        if not all(math.isfinite(value) and value >= 0 for value in (q_dead_n_per_m, point_load_n)):
+            raise ValueError("Loads must be finite and nonnegative")
         self.L = span_m
         self.ne = num_elements
         self.nn = num_elements + 1
@@ -157,6 +171,8 @@ class EulerBernoulliBridgeSolver:
         return w_udl + w_pt
 
     def solve_fem(self, ei_element: Sequence[float]) -> Tuple[List[float], List[float], List[float]]:
+        if len(ei_element) != self.ne or any(not math.isfinite(value) or value <= 0 for value in ei_element):
+            raise ValueError("Supply one finite positive stiffness per element")
         ndof = 2 * self.nn
         bw = 3
         K_band = [[0.0] * (bw + 1) for _ in range(ndof)]
@@ -190,14 +206,30 @@ class EulerBernoulliBridgeSolver:
         mid_node = self.ne // 2
         F[2 * mid_node] += self.P
 
-        # Enforce w(0) = 0 (dof 0) and w(L) = 0 (dof 2*ne) via penalty method
-        penalty = 1.0e22
-        K_band[0][0] += penalty
-        F[0] = 0.0
-        K_band[2 * self.ne][0] += penalty
-        F[2 * self.ne] = 0.0
+        original_stiffness = [row[:] for row in K_band]
+        original_force = F[:]
+        supports = (0, 2*self.ne)
+        for support in supports:
+            for row in range(max(0, support-bw), support):
+                K_band[row][support-row] = 0.0
+            K_band[support] = [1.0] + [0.0]*bw
+            F[support] = 0.0
 
         u = solve_banded_spd(K_band, F, bw)
+        residual = [-value for value in original_force]
+        for row in range(ndof):
+            for offset in range(min(bw+1, ndof-row)):
+                column = row+offset
+                value = original_stiffness[row][offset]
+                residual[row] += value*u[column]
+                if offset:
+                    residual[column] += value*u[row]
+        self.last_equilibrium = {
+            "support_reactions_n": [-residual[index] for index in supports],
+            "total_applied_load_n": self.q0*self.L+self.P,
+            "force_balance_residual_n": sum(residual[index] for index in supports)+self.q0*self.L+self.P,
+            "free_dof_max_residual": max(abs(value) for index, value in enumerate(residual) if index not in supports),
+        }
         w_nodes = [u[2 * i] for i in range(self.nn)]
         theta_nodes = [u[2 * i + 1] for i in range(self.nn)]
 
@@ -216,6 +248,11 @@ class EulerBernoulliBridgeSolver:
     def train_physics_informed_spectral_surrogate(
         self, n_modes: int = 9, n_collocation: int = 96
     ) -> Dict[str, float]:
+        setup_started = time.perf_counter()
+        if not isinstance(n_modes, int) or n_modes < 1 or not isinstance(n_collocation, int) or n_collocation < max(16, n_modes+1):
+            raise ValueError("Invalid mode count or collocation grid")
+        if self.q0 == 0 and self.P == 0:
+            raise ValueError("Relative surrogate error is undefined for zero loading")
         x_col = [i * (self.L / (n_collocation - 1)) for i in range(n_collocation)]
         w_exact_col = [self.exact_intact_deflection_at(x) for x in x_col]
 
@@ -243,7 +280,7 @@ class EulerBernoulliBridgeSolver:
         ]
 
         # Normal equations (A^T A) c = A^T b combining Physics PDE residual + Sensor Data loss
-        alpha_pde = 1.0 / (self.q0 ** 2)
+        alpha_pde = 1.0 / (max(self.q0, self.P/self.L) ** 2)
         alpha_dat = 1.0e6
 
         ATA = [[0.0] * n_modes for _ in range(n_modes)]
@@ -282,23 +319,31 @@ class EulerBernoulliBridgeSolver:
             pde_res_sq += (lhs_val - q_eff_col[r]) ** 2
         pde_residual_rel = math.sqrt(pde_res_sq / q_norm_sq)
 
-        # Speed benchmark: Surrogate sensor-array evaluation vs Full Hermite FEM solve
+        setup_ms = (time.perf_counter()-setup_started)*1000
         Phi_sens = [[math.sin(k_m[j] * x) for j in range(n_modes)] for x in x_sens]
-        t0 = time.perf_counter()
-        for _ in range(500):
-            _ = [sum(row[j] * c_opt[j] for j in range(n_modes)) for row in Phi_sens]
-        t_surrogate_ms = (time.perf_counter() - t0) * 1000.0 / 500.0
-
         ei_uniform = [self.ei0] * self.ne
-        t1 = time.perf_counter()
-        for _ in range(500):
-            _ = self.solve_fem(ei_uniform)
-        t_fem_ms = (time.perf_counter() - t1) * 1000.0 / 500.0
+        inference = lambda: [sum(row[j] * c_opt[j] for j in range(n_modes)) for row in Phi_sens]
+        forward = lambda: self.solve_fem(ei_uniform)
+        timing = {}
+        for label, operation in (("inference", inference), ("fem", forward)):
+            operation()
+            batches = []
+            for _ in range(7):
+                started = time.perf_counter()
+                for _ in range(20):
+                    operation()
+                batches.append((time.perf_counter()-started)*1000/20)
+            timing[label] = batches
+        t_surrogate_ms = statistics.median(timing["inference"])
+        t_fem_ms = statistics.median(timing["fem"])
 
         return {
             "num_spectral_modes": n_modes,
             "num_collocation_points": n_collocation,
             "num_virtual_sensors": len(sensor_idx),
+            "setup_ms": setup_ms,
+            "timing_batch_means_ms": timing,
+            "timing_caveat": "Cached 15-sensor inference versus complete FEM assembly, solve and equilibrium diagnostics; not like-for-like end-to-end speedup",
             "l2_relative_error_pct": round(l2_rel_err_pct, 5),
             "relative_pde_residual": round(pde_residual_rel, 8),
             "surrogate_inference_ms": round(t_surrogate_ms, 5),
@@ -306,32 +351,40 @@ class EulerBernoulliBridgeSolver:
             "speedup_factor_x": round(t_fem_ms / max(t_surrogate_ms, 1e-9), 1),
         }
 
-    def solve_inverse_damage_identification(self) -> Dict[str, object]:
-        rng = random.Random(42)
+    def solve_inverse_damage_identification(self, seed=42, noise_fraction=0.01, sensor_indices=None, damage_center=11.0, damage_severity=0.32, moment_bias=0.0, regularization=1.2e-6) -> Dict[str, object]:
+        if not all(math.isfinite(value) for value in (noise_fraction, damage_center, damage_severity, moment_bias, regularization)):
+            raise ValueError("Inverse parameters must be finite")
+        if noise_fraction < 0 or not 0 <= damage_severity < 1 or not 0 <= damage_center <= self.L or regularization <= 0 or moment_bias <= -1:
+            raise ValueError("Invalid inverse parameters")
+        sensors = list(range(self.ne)) if sensor_indices is None else list(sensor_indices)
+        if len(sensors) < 2 or len(set(sensors)) != len(sensors) or any(not isinstance(index, int) or not 0 <= index < self.ne for index in sensors):
+            raise ValueError("At least two distinct valid sensor indices are required")
+        rng = random.Random(seed)
         x_mid = [(e + 0.5) * self.dx for e in range(self.ne)]
 
         # True damaged stiffness profile: 32% smooth Gaussian stiffness drop centered at x = 11.0m
         damage_fraction_true = [
-            0.32 * math.exp(-0.5 * ((xm - 11.0) / 1.6) ** 2) for xm in x_mid
+            damage_severity * math.exp(-0.5 * ((xm - damage_center) / 1.6) ** 2) for xm in x_mid
         ]
         ei_true = [self.ei0 * (1.0 - df) for df in damage_fraction_true]
 
         w_damaged, _, moment_elem = self.solve_fem(ei_true)
 
         # Curvature kappa_e = M_e / EI_true_e with 1.0% Gaussian sensor noise
-        kappa_true = [m / ei for m, ei in zip(moment_elem, ei_true)]
+        kappa_true = [(1+moment_bias)*moment / stiffness for moment, stiffness in zip(moment_elem, ei_true)]
         mean_k = sum(kappa_true) / self.ne
         std_k = math.sqrt(sum((k - mean_k) ** 2 for k in kappa_true) / self.ne)
-        kappa_obs = [k + rng.gauss(0.0, 0.01 * std_k) for k in kappa_true]
+        kappa_obs = [value + rng.gauss(0.0, noise_fraction * std_k) for value in kappa_true]
 
         # Tikhonov-regularized inverse system for compliance ratio s_e = EI0 / EI_e:
         #   (M_hat^2 + reg_lambda * L^T L) s = M_hat * kappa_obs
         m_hat = [m / self.ei0 for m in moment_elem]
-        reg_lambda = 1.2e-6
+        reg_lambda = regularization
         A_inv = [[0.0] * self.ne for _ in range(self.ne)]
-        b_inv = [m_hat[i] * kappa_obs[i] for i in range(self.ne)]
+        b_inv = [0.0]*self.ne
 
-        for i in range(self.ne):
+        for i in sensors:
+            b_inv[i] = m_hat[i]*kappa_obs[i]
             A_inv[i][i] += m_hat[i] ** 2
 
         # Add 2nd-order Laplacian smoothing L^T L
@@ -355,6 +408,13 @@ class EulerBernoulliBridgeSolver:
         idx_recon = ei_recon.index(min(ei_recon))
 
         return {
+            "seed": seed, "noise_fraction_of_curvature_std": noise_fraction,
+            "sensor_indices": sensors, "moment_bias_fraction": moment_bias,
+            "regularization": regularization,
+            "baseline_intact_profile_l2_error_pct": 100*math.sqrt(sum((self.ei0-value)**2 for value in ei_true)/norm_sq),
+            "clipped_compliance_values": sum(not 0.5 <= value <= 2.5 for value in s_recon),
+            "damage_location_error_m": abs(x_mid[idx_true]-x_mid[idx_recon]),
+            "observation_fit_rmse_curvature": math.sqrt(sum((moment_elem[index]/ei_recon[index]-kappa_obs[index])**2 for index in sensors)/len(sensors)),
             "true_peak_stiffness_loss_pct": round(peak_damage_true_pct, 2),
             "reconstructed_peak_stiffness_loss_pct": round(peak_damage_recon_pct, 2),
             "true_damage_center_m": round(x_mid[idx_true], 2),
@@ -376,6 +436,8 @@ def run_monte_carlo_and_form_reliability(
     span_m: float = 24.0,
     num_trials: int = 100_000,
 ) -> Dict[str, float]:
+    if not math.isfinite(span_m) or span_m <= 0 or not isinstance(num_trials, int) or num_trials < 1:
+        raise ValueError("Positive finite span and positive integer trial count required")
     rng = random.Random(2026)
     w_allow_m = span_m / 600.0  # 0.040 m = 40.0 mm
 
@@ -387,6 +449,7 @@ def run_monte_carlo_and_form_reliability(
     c_pt = (span_m ** 3) / 48.0
 
     failures = 0
+    clipped_stiffness_samples = 0
     sum_w = 0.0
     sum_g = 0.0
     sum_g2 = 0.0
@@ -396,6 +459,7 @@ def run_monte_carlo_and_form_reliability(
     for _ in range(num_trials):
         ei_s = gauss(mu_ei, sig_ei)
         if ei_s < 2.0e9:
+            clipped_stiffness_samples += 1
             ei_s = 2.0e9
         q_s = gauss(mu_q, sig_q)
         p_s = gauss(mu_p, sig_p)
@@ -439,11 +503,22 @@ def run_monte_carlo_and_form_reliability(
         beta_hl = (g_val - dot_gu) / norm_grad
         u = [(-grad_u[i] / norm_grad) * beta_hl for i in range(3)]
 
-    beta_form = math.sqrt(sum(ui * ui for ui in u))
+    beta_form = math.copysign(math.sqrt(sum(ui * ui for ui in u)), w_allow_m-(c_udl*mu_q+c_pt*mu_p)/mu_ei)
     pf_form = 0.5 * math.erfc(beta_form / math.sqrt(2.0))
+    exact_beta = (w_allow_m*mu_ei-c_udl*mu_q-c_pt*mu_p) / math.sqrt((w_allow_m*sig_ei)**2+(c_udl*sig_q)**2+(c_pt*sig_p)**2)
+    exact_pf = 0.5*math.erfc(exact_beta/math.sqrt(2))
+    denominator = 1+1.96**2/num_trials
+    centre = (pf_mc+1.96**2/(2*num_trials))/denominator
+    half_width = 1.96*math.sqrt(pf_mc*(1-pf_mc)/num_trials+1.96**2/(4*num_trials**2))/denominator
 
     return {
         "num_monte_carlo_trials": num_trials,
+        "failure_count": failures,
+        "wilson_95_interval": [max(0.0, centre-half_width), min(1.0, centre+half_width)],
+        "zero_failure_95_upper_bound": 1-0.05**(1/num_trials) if failures == 0 else None,
+        "clipped_stiffness_samples": clipped_stiffness_samples,
+        "linear_gaussian_limit_state_exact_probability": exact_pf,
+        "reference_caveat": "Exact for linearized event w_allow*EI-c_udl*q-c_pt*P < 0 with independent Gaussians; MC clips EI below 2e9",
         "allowable_deflection_mm": round(w_allow_m * 1000.0, 2),
         "mean_deflection_mm": round(mean_w * 1000.0, 3),
         "p99_deflection_mm": round(p99_w * 1000.0, 3),
@@ -493,9 +568,13 @@ def run_simp_bridge_topology_optimization(
     max_iter: int = 35,
 ) -> Dict[str, object]:
     """
-    Reproduces Sigmund (2001) SIMP minimum-compliance topology optimization
+    Implements a Sigmund-inspired SIMP minimum-compliance experiment
     for a symmetric half-MBB / Pratt bridge girder domain using banded Cholesky FEM.
     """
+    if any(not isinstance(value, int) or value < 1 for value in (nelx, nely, max_iter)):
+        raise ValueError("Positive mesh sizes and iteration count required")
+    if not all(math.isfinite(value) for value in (volfrac, penal, rmin)) or not 0.001 < volfrac <= 1 or penal < 1 or rmin <= 0:
+        raise ValueError("Invalid SIMP parameters")
     KE = lk_plane_stress_q4(nu=0.30)
     ndof = 2 * (nelx + 1) * (nely + 1)
     bw = 2 * (nely + 2) + 1  # exact half-bandwidth for column-major node numbering
@@ -527,13 +606,14 @@ def run_simp_bridge_topology_optimization(
 
     # Fixed DOFs: left symmetry edge x-DOFs + bottom-right bridge pier y-DOF
     fixed_dofs = list(range(0, 2 * (nely + 1), 2)) + [ndof - 1]
-    penalty = 1.0e14
     Emin = 1e-3
     E0 = 1.0
 
     compliance_history: List[float] = []
+    converged = False
+    max_diff = math.inf
 
-    for loop in range(1, max_iter + 1):
+    for loop in range(1, max_iter + 2):
         K_band = [[0.0] * (bw + 1) for _ in range(ndof)]
         F = [0.0] * ndof
         F[1] = -1.0
@@ -552,7 +632,9 @@ def run_simp_bridge_topology_optimization(
                             K_band[ig][jg - ig] += stiffness_factor * ke_row[j_loc]
 
         for fd in fixed_dofs:
-            K_band[fd][0] += penalty
+            for row in range(max(0, fd-bw), fd):
+                K_band[row][fd-row] = 0.0
+            K_band[fd] = [1.0]+[0.0]*bw
             F[fd] = 0.0
 
         U = solve_banded_spd(K_band, F, bw)
@@ -577,6 +659,8 @@ def run_simp_bridge_topology_optimization(
                 dc[ely][elx] = -penal * (rho ** (penal - 1.0)) * (E0 - Emin) * ce
 
         compliance_history.append(round(c, 4))
+        if converged or loop > max_iter:
+            break
 
         # Mesh-independence filter
         dcn = [[0.0] * nelx for _ in range(nely)]
@@ -615,7 +699,7 @@ def run_simp_bridge_topology_optimization(
         )
         x = xnew
         if max_diff < 0.01 and loop >= 20:
-            break
+            converged = True
 
     initial_c = compliance_history[0]
     final_c = compliance_history[-1]
@@ -648,7 +732,11 @@ def run_simp_bridge_topology_optimization(
         "achieved_volume_fraction": round(achieved_vol, 4),
         "simp_penalization_p": penal,
         "filter_radius_rmin": rmin,
-        "iterations_executed": len(compliance_history),
+        "iterations_executed": len(compliance_history)-1,
+        "converged": converged,
+        "last_max_density_change": max_diff,
+        "termination_reason": "density_change_tolerance" if converged else "iteration_limit",
+        "final_compliance": round(final_c, 4),
         "initial_compliance": round(initial_c, 4),
         "final_optimal_compliance": round(final_c, 4),
         "compliance_reduction_pct": round(compliance_reduction_pct, 2),
@@ -715,9 +803,9 @@ def main() -> None:
         },
         {
             "test_id": "STRUCT_02_PHYSICS_INFORMED_SURROGATE_ACCURACY",
-            "description": "Physics-informed spectral surrogate achieves < 0.25% L2 deflection error and > 10x speedup vs FEM",
+            "description": "Spectral surrogate has < 0.25% L2 deflection error; timing is descriptive, not a correctness criterion",
             "computed_value": f"L2_err={surrogate_res['l2_relative_error_pct']:.4f}%, Speedup={surrogate_res['speedup_factor_x']}x",
-            "passed": surrogate_res["l2_relative_error_pct"] < 0.25 and surrogate_res["speedup_factor_x"] > 10.0,
+            "passed": surrogate_res["l2_relative_error_pct"] < 0.25,
         },
         {
             "test_id": "STRUCT_03_INVERSE_DAMAGE_LOCALIZATION",
@@ -732,10 +820,10 @@ def main() -> None:
             "passed": abs(reliability_res["monte_carlo_failure_probability"] - reliability_res["form_failure_probability"]) < 0.005,
         },
         {
-            "test_id": "STRUCT_05_SIMP_TOPOLOGY_CONVERGENCE",
-            "description": "Sigmund (2001) SIMP bridge optimizer satisfies exact volume constraint (0.45) and reduces compliance > 55%",
+            "test_id": "STRUCT_05_SIMP_FEASIBILITY_AND_IMPROVEMENT",
+            "description": "SIMP experiment approximately satisfies volume constraint and reduces compliance; convergence reported separately",
             "computed_value": f"Vol={topopt_res['achieved_volume_fraction']:.4f}, Compliance Reduction={topopt_res['compliance_reduction_pct']:.2f}%",
-            "passed": abs(topopt_res["achieved_volume_fraction"] - 0.45) < 0.005 and topopt_res["compliance_reduction_pct"] > 55.0,
+            "passed": abs(topopt_res["achieved_volume_fraction"] - 0.45) < 0.005 and topopt_res["final_compliance"] < topopt_res["initial_compliance"],
         },
     ]
 
@@ -745,8 +833,7 @@ def main() -> None:
     report = {
         "project": "StructSurrogate-TopOpt: Physics-Informed Beam Inverse Solver, Reliability Engine & SIMP Topology Optimizer",
         "course_grounding": "CVL2502 (Engineering Mechanics of Determinate Structures, IIT Delhi)",
-        "paper_reproductions": [
-            "Raissi, Perdikaris, & Karniadakis (2019), J. Comput. Phys., 378, 686-707",
+        "method_references_not_exact_reproductions": [
             "Sigmund, O. (2001), Structural and Multidisciplinary Optimization, 21(2), 120-127",
         ],
         "forward_fem_verification": {
