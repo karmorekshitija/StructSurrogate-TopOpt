@@ -15,33 +15,33 @@
     "num_spectral_modes": 9,
     "num_collocation_points": 96,
     "num_virtual_sensors": 15,
-    "setup_ms": 2.5337000006402377,
+    "setup_ms": 4.8790000000735745,
     "timing_batch_means_ms": {
       "inference": [
-        0.01988000003620982,
-        0.019299999985378236,
-        0.01966500003618421,
-        0.023750000036670826,
-        0.037369999881775584,
-        0.02785500000754837,
-        0.03441499993641628
+        0.03907000000253902,
+        0.04014999999526481,
+        0.03997000000026674,
+        0.04030499999316817,
+        0.03742999999758467,
+        0.03470000000334039,
+        0.038059999997130944
       ],
       "fem": [
-        1.2116200001401012,
-        1.0858050000024377,
-        0.871009999900707,
-        0.8972850000645849,
-        0.8335849999639322,
-        0.8143150000250898,
-        0.886739999987185
+        1.9515699999942626,
+        1.6369450000070174,
+        1.7453950000003715,
+        2.125114999989819,
+        1.8616099999917424,
+        1.8202750000000378,
+        1.59600000000637
       ]
     },
     "timing_caveat": "Cached 15-sensor inference versus complete FEM assembly, solve and equilibrium diagnostics; not like-for-like end-to-end speedup",
     "l2_relative_error_pct": 0.00182,
     "relative_pde_residual": 5.8e-07,
-    "surrogate_inference_ms": 0.02375,
-    "fem_solve_ms": 0.88674,
-    "speedup_factor_x": 37.3
+    "surrogate_inference_ms": 0.03907,
+    "fem_solve_ms": 1.82028,
+    "speedup_factor_x": 46.6
   },
   "inverse_damage_identification": {
     "seed": 42,
@@ -206,7 +206,7 @@
     {
       "test_id": "STRUCT_02_PHYSICS_INFORMED_SURROGATE_ACCURACY",
       "description": "Spectral surrogate has < 0.25% L2 deflection error; timing is descriptive, not a correctness criterion",
-      "computed_value": "L2_err=0.0018%, Speedup=37.3x",
+      "computed_value": "L2_err=0.0018%, Speedup=46.6x",
       "passed": true
     },
     {
